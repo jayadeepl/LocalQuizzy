@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  quizzes   Quiz[]
+}
+
+model Quiz {
+  id          String        @id @default(uuid())
+  title       String
+  description String        @default("")
+  userId      String
+  settings    String        @default("{}")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  sessions    QuizSession[]
+}
+
+model Question {
+  id            String     @id @default(uuid())
+  quizId        String
+  text          String
+  imageUrl      String?
+  options       String
+  correctOption Int
+  timeLimit     Int        @default(20)
+  points        Int        @default(1000)
+  order         Int        @default(0)
+  quiz          Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  responses     Response[]
+}
+
+model QuizSession {
+  id              String        @id @default(uuid())
+  quizId          String
+  pin             String        @unique
+  status          String        @default("LOBBY")
+  teamMode        Boolean       @default(false)
+  currentQuestion Int           @default(-1)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime      @default(now())
+  quiz            Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  participants    Participant[]
+  responses       Response[]
+}
+
+model Participant {
+  id        String      @id @default(uuid())
+  sessionId String
+  name      String
+  teamName  String?
+  socketId  String?
+  score     Int         @default(0)
+  accuracy  Float       @default(0)
+  session   QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  responses Response[]
+}
+
+model Response {
+  id            String      @id @default(uuid())
+  sessionId     String
+  participantId String
+  questionId    String
+  answer        Int
+  isCorrect     Boolean
+  responseTime  Float
+  score         Int         @default(0)
+  createdAt     DateTime    @default(now())
+  session       QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  question      Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
