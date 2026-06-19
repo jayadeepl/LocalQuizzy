@@ -8,7 +8,8 @@ import { useSocket } from '@/hooks/use-socket';
 import { useTimer } from '@/hooks/use-timer';
 import { sounds } from '@/lib/sounds';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, Check, X, Trophy, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Clock, Check, X, Trophy, Loader2, Send } from 'lucide-react';
 
 type Phase = 'waiting' | 'question' | 'answered' | 'result' | 'leaderboard' | 'finished';
 
@@ -29,10 +30,14 @@ export default function PlayerGamePage() {
   const [phase, setPhase] = useState<Phase>('waiting');
   const [questionData, setQuestionData] = useState<any>(null);
   const [selectedAnswer, setSelectedAnswer] = useState(-1);
-  const [answerResult, setAnswerResult] = useState<{ isCorrect: boolean; score: number } | null>(null);
+  const [answerResult, setAnswerResult] = useState<{ isCorrect: boolean; score: number; isSurvey?: boolean } | null>(null);
   const [myScore, setMyScore] = useState(0);
   const [myRank, setMyRank] = useState(0);
   const [finalResults, setFinalResults] = useState<any>(null);
+  const [isSurvey, setIsSurvey] = useState(false);
+  const [isText, setIsText] = useState(false);
+  const [noTimer, setNoTimer] = useState(false);
+  const [textInput, setTextInput] = useState('');
   const playerName = typeof window !== 'undefined' ? localStorage.getItem('playerName') || 'Player' : 'Player';
   const participantId = typeof window !== 'undefined' ? localStorage.getItem('participantId') : null;
 
@@ -43,7 +48,15 @@ export default function PlayerGamePage() {
         setPhase('question');
         setSelectedAnswer(-1);
         setAnswerResult(null);
-        timer.start(data.timeLimit);
+        setIsSurvey(data.isSurvey || false);
+        setIsText(data.questionType === 'text');
+        setNoTimer(data.timeLimit === 0);
+        setTextInput('');
+        if (data.timeLimit > 0) {
+          timer.start(data.timeLimit);
+        } else {
+          timer.reset();
+        }
         sounds.questionStart();
       }),
       on('timer-update', (data: any) => {
@@ -53,17 +66,20 @@ export default function PlayerGamePage() {
       on('answer-confirmed', (data: any) => {
         setAnswerResult(data);
         setPhase('result');
-        if (data.isCorrect) {
+        if (data.isSurvey) {
+          sounds.correct();
+        } else if (data.isCorrect) {
           sounds.correct();
           setMyScore((prev) => prev + data.score);
         } else {
           sounds.incorrect();
         }
       }),
-      on('question-ended', () => {
+      on('question-ended', (data: any) => {
         if (phase === 'question') {
           setPhase('result');
-          setAnswerResult({ isCorrect: false, score: 0 });
+          const survey = data?.isSurvey || isSurvey;
+          setAnswerResult({ isCorrect: false, score: 0, isSurvey: survey });
         }
       }),
       on('leaderboard-update', (data: any) => {
@@ -93,6 +109,16 @@ export default function PlayerGamePage() {
       sessionId,
       questionId: questionData.questionId,
       answer: index,
+    });
+  };
+
+  const submitTextAnswer = () => {
+    if (!textInput.trim() || !questionData) return;
+    setPhase('answered');
+    emit('submit-text-answer', {
+      sessionId,
+      questionId: questionData.questionId,
+      textAnswer: textInput.trim(),
     });
   };
 
@@ -155,37 +181,66 @@ export default function PlayerGamePage() {
               className="w-full max-w-lg"
             >
               <div className="text-center mb-4">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Clock className="h-5 w-5" />
-                  <span className={`text-3xl font-bold ${timer.remaining <= 5 ? 'text-red-400' : ''}`}>
-                    {timer.remaining}
-                  </span>
-                </div>
-                <Progress
-                  value={timer.percentage}
-                  className="h-2 mb-3"
-                  indicatorClassName={timer.remaining <= 5 ? 'bg-red-500' : 'bg-green-500'}
-                />
+                {noTimer ? (
+                  <p className="text-sm text-amber-400 mb-2">Take your time — no timer</p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Clock className="h-5 w-5" />
+                      <span className={`text-3xl font-bold ${timer.remaining <= 5 ? 'text-red-400' : ''}`}>
+                        {timer.remaining}
+                      </span>
+                    </div>
+                    <Progress
+                      value={timer.percentage}
+                      className="h-2 mb-3"
+                      indicatorClassName={timer.remaining <= 5 ? 'bg-red-500' : 'bg-green-500'}
+                    />
+                  </>
+                )}
                 <p className="text-sm opacity-60">
                   Q{questionData.questionNumber}/{questionData.totalQuestions}
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3">
-                {questionData.options?.map((opt: string, i: number) => (
-                  <motion.button
-                    key={i}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => submitAnswer(i)}
-                    className={`${optionColors[i]} p-6 rounded-xl text-white text-lg font-bold flex items-center gap-4 transition-all shadow-lg`}
-                  >
-                    <span className="text-2xl w-10 h-10 flex items-center justify-center rounded-lg bg-white/20">
-                      {optionLabels[i]}
-                    </span>
-                    <span className="flex-1 text-left">{opt}</span>
-                  </motion.button>
-                ))}
-              </div>
+              {isText ? (
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-center">{questionData.text}</h3>
+                  <div className="flex gap-2">
+                    <Input
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      placeholder="Type your answer..."
+                      className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/40 text-lg h-14"
+                      onKeyDown={(e) => e.key === 'Enter' && submitTextAnswer()}
+                      autoFocus
+                    />
+                    <Button
+                      onClick={submitTextAnswer}
+                      disabled={!textInput.trim()}
+                      className="bg-purple-500 hover:bg-purple-600 h-14 px-6"
+                    >
+                      <Send className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {questionData.options?.map((opt: string, i: number) => (
+                    <motion.button
+                      key={i}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => submitAnswer(i)}
+                      className={`${optionColors[i]} p-6 rounded-xl text-white text-lg font-bold flex items-center gap-4 transition-all shadow-lg`}
+                    >
+                      <span className="text-2xl w-10 h-10 flex items-center justify-center rounded-lg bg-white/20">
+                        {optionLabels[i]}
+                      </span>
+                      <span className="flex-1 text-left">{opt}</span>
+                    </motion.button>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -197,12 +252,21 @@ export default function PlayerGamePage() {
               exit={{ opacity: 0 }}
               className="text-center"
             >
-              <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
-                optionColors[selectedAnswer]?.split(' ')[0]
-              }`}>
-                <span className="text-3xl font-bold">{optionLabels[selectedAnswer]}</span>
-              </div>
+              {isText ? (
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center bg-purple-500">
+                  <Check className="h-10 w-10" />
+                </div>
+              ) : (
+                <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                  optionColors[selectedAnswer]?.split(' ')[0]
+                }`}>
+                  <span className="text-3xl font-bold">{optionLabels[selectedAnswer]}</span>
+                </div>
+              )}
               <h2 className="text-2xl font-bold mb-2">Answer Submitted!</h2>
+              {isText && textInput && (
+                <p className="text-lg text-purple-400 mb-2">&quot;{textInput}&quot;</p>
+              )}
               <p className="text-lg opacity-70">Waiting for results...</p>
               <Loader2 className="h-6 w-6 mx-auto mt-4 animate-spin opacity-50" />
             </motion.div>
@@ -216,7 +280,19 @@ export default function PlayerGamePage() {
               exit={{ opacity: 0 }}
               className="text-center"
             >
-              {answerResult.isCorrect ? (
+              {answerResult.isSurvey || isSurvey ? (
+                <>
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="w-24 h-24 mx-auto mb-4 rounded-full bg-blue-500 flex items-center justify-center"
+                  >
+                    <Check className="h-12 w-12" />
+                  </motion.div>
+                  <h2 className="text-3xl font-bold mb-2 text-blue-400">Response Recorded!</h2>
+                  <p className="text-lg opacity-60 mt-2">Thanks for your input</p>
+                </>
+              ) : answerResult.isCorrect ? (
                 <>
                   <motion.div
                     initial={{ scale: 0 }}

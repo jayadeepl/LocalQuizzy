@@ -1,4 +1,4 @@
-import { IsString, IsInt, IsOptional, IsArray, Min, Max } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsArray, Min, Max, IsIn } from 'class-validator';
 
 export class CreateQuestionDto {
   @IsString()
@@ -8,23 +8,30 @@ export class CreateQuestionDto {
   @IsString()
   imageUrl?: string;
 
-  @IsArray()
-  options: string[];
+  @IsOptional()
+  @IsString()
+  @IsIn(['mcq', 'text'])
+  questionType?: string;
 
-  @IsInt()
-  @Min(0)
-  @Max(3)
-  correctOption: number;
+  @IsOptional()
+  @IsArray()
+  options?: string[];
 
   @IsOptional()
   @IsInt()
-  @Min(5)
+  @Min(-1)
+  @Max(3)
+  correctOption?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
   @Max(120)
   timeLimit?: number;
 
   @IsOptional()
   @IsInt()
-  @Min(100)
+  @Min(0)
   points?: number;
 }
 
@@ -38,24 +45,29 @@ export class UpdateQuestionDto {
   imageUrl?: string;
 
   @IsOptional()
+  @IsString()
+  @IsIn(['mcq', 'text'])
+  questionType?: string;
+
+  @IsOptional()
   @IsArray()
   options?: string[];
 
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(-1)
   @Max(3)
   correctOption?: number;
 
   @IsOptional()
   @IsInt()
-  @Min(5)
+  @Min(0)
   @Max(120)
   timeLimit?: number;
 
   @IsOptional()
   @IsInt()
-  @Min(100)
+  @Min(0)
   points?: number;
 }
 

@@ -9,9 +9,10 @@ import { useTimer } from '@/hooks/use-timer';
 import { sounds } from '@/lib/sounds';
 import type { QuestionStats, LeaderboardEntry } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { WordCloud } from '@/components/ui/word-cloud';
 import {
   Users, Pause, Play, SkipForward, Square,
-  Trophy, Volume2, VolumeX, BarChart3,
+  Trophy, Volume2, VolumeX, BarChart3, Type, StopCircle,
 } from 'lucide-react';
 
 type Phase = 'waiting' | 'question' | 'answer-reveal' | 'leaderboard' | 'finished';
@@ -36,6 +37,10 @@ export default function HostGamePage() {
   const [paused, setPaused] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [finalResults, setFinalResults] = useState<any>(null);
+  const [isSurvey, setIsSurvey] = useState(false);
+  const [isText, setIsText] = useState(false);
+  const [noTimer, setNoTimer] = useState(false);
+  const [wordCloudData, setWordCloudData] = useState<{ words: { text: string; count: number }[]; total: number }>({ words: [], total: 0 });
 
   useEffect(() => {
     emit('host-join', { sessionId });
@@ -58,7 +63,15 @@ export default function HostGamePage() {
         setResponseCount(0);
         setCorrectAnswer(-1);
         setStats(null);
-        timer.start(data.timeLimit);
+        setIsSurvey(data.isSurvey || false);
+        setIsText(data.questionType === 'text');
+        setNoTimer(data.timeLimit === 0);
+        setWordCloudData({ words: [], total: 0 });
+        if (data.timeLimit > 0) {
+          timer.start(data.timeLimit);
+        } else {
+          timer.reset();
+        }
         sounds.questionStart();
       }),
       on('timer-update', (data: any) => {
@@ -69,9 +82,17 @@ export default function HostGamePage() {
         setResponseCount(data.responseCount);
         setTotalPlayers(data.totalPlayers);
       }),
+      on('word-cloud-update', (data: any) => {
+        setWordCloudData({ words: data.words || [], total: data.total || 0 });
+      }),
       on('question-ended', (data: any) => {
         setCorrectAnswer(data.correctAnswer);
         setStats(data.stats);
+        setIsSurvey(data.isSurvey || false);
+        setIsText(data.isText || false);
+        if (data.wordCloud) {
+          setWordCloudData(data.wordCloud);
+        }
         setPhase('answer-reveal');
         timer.reset();
       }),
@@ -96,6 +117,8 @@ export default function HostGamePage() {
   }, [emit, sessionId]);
 
   const nextQuestion = () => emit('next-question', { sessionId });
+  const showLeaderboard = () => emit('show-leaderboard', { sessionId });
+  const endQuestionManual = () => emit('end-question-manual', { sessionId });
   const pauseSession = () => emit(paused ? 'resume-session' : 'pause-session', { sessionId });
   const endSession = () => emit('end-session', { sessionId });
 
@@ -214,18 +237,33 @@ export default function HostGamePage() {
             className="w-full max-w-4xl"
           >
             <div className="text-center mb-8">
-              <div className="mb-4">
-                <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
-                  <span className="text-4xl font-bold">{timer.remaining}</span>
-                  <span className="text-sm opacity-70">seconds</span>
+              {noTimer ? (
+                <div className="mb-4">
+                  <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-500/30 rounded-full px-4 py-2 text-amber-400">
+                    <span className="text-sm font-medium">No Timer — End when ready</span>
+                  </div>
                 </div>
-              </div>
-              <Progress
-                value={timer.percentage}
-                className="h-3 mb-6"
-                indicatorClassName={timer.remaining <= 5 ? 'bg-red-500' : 'bg-green-500'}
-              />
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
+                      <span className="text-4xl font-bold">{timer.remaining}</span>
+                      <span className="text-sm opacity-70">seconds</span>
+                    </div>
+                  </div>
+                  <Progress
+                    value={timer.percentage}
+                    className="h-3 mb-6"
+                    indicatorClassName={timer.remaining <= 5 ? 'bg-red-500' : 'bg-green-500'}
+                  />
+                </>
+              )}
               <h2 className="text-3xl md:text-4xl font-bold mb-2">{questionData.text}</h2>
+              {isText && (
+                <div className="inline-flex items-center gap-1 mt-1 text-purple-400 text-sm">
+                  <Type className="h-4 w-4" /> Word Cloud
+                </div>
+              )}
               {questionData.imageUrl && (
                 <img
                   src={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:3001${questionData.imageUrl}`}
@@ -234,19 +272,32 @@ export default function HostGamePage() {
                 />
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              {questionData.options?.map((opt: string, i: number) => (
-                <div
-                  key={i}
-                  className={`${optionColors[i]} p-6 rounded-xl text-center text-xl font-bold shadow-lg`}
-                >
-                  <span className="text-3xl mr-3">{optionLabels[i]}</span>
-                  {opt}
+            {isText ? (
+              <div className="bg-white/5 rounded-2xl border border-white/10 p-4 flex items-center justify-center min-h-[16rem]">
+                <p className="text-white/40 text-lg">Collecting responses...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {questionData.options?.map((opt: string, i: number) => (
+                  <div
+                    key={i}
+                    className={`${optionColors[i]} p-6 rounded-xl text-center text-xl font-bold shadow-lg`}
+                  >
+                    <span className="text-3xl mr-3">{optionLabels[i]}</span>
+                    {opt}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="text-center mt-6">
+              <span className="opacity-70">{responseCount} of {totalPlayers} answered</span>
+              {noTimer && (
+                <div className="mt-4">
+                  <Button size="lg" onClick={endQuestionManual} className="bg-amber-500 hover:bg-amber-600 text-lg">
+                    <StopCircle className="h-5 w-5 mr-2" /> End Question
+                  </Button>
                 </div>
-              ))}
-            </div>
-            <div className="text-center mt-6 opacity-70">
-              {responseCount} of {totalPlayers} answered
+              )}
             </div>
           </motion.div>
         )}
@@ -257,37 +308,110 @@ export default function HostGamePage() {
             animate={{ opacity: 1 }}
             className="w-full max-w-4xl"
           >
-            <h2 className="text-2xl font-bold text-center mb-6">{questionData.text}</h2>
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              {questionData.options?.map((opt: string, i: number) => {
-                const originalIndex = questionData.optionOrder?.[i] ?? i;
-                const isCorrect = originalIndex === correctAnswer;
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ scale: 1 }}
-                    animate={{ scale: isCorrect ? 1.05 : 0.95, opacity: isCorrect ? 1 : 0.5 }}
-                    className={`${isCorrect ? optionColors[i] : 'bg-gray-700'} p-6 rounded-xl text-center text-xl font-bold relative`}
-                  >
-                    <span className="text-3xl mr-3">{optionLabels[i]}</span>
-                    {opt}
-                    {isCorrect && <span className="absolute top-2 right-3 text-2xl">✓</span>}
-                  </motion.div>
-                );
-              })}
-            </div>
-            {stats && (
-              <div className="flex justify-center gap-8 text-center">
-                <div>
-                  <p className="text-3xl font-bold text-green-400">{stats.correct}</p>
-                  <p className="text-sm opacity-70">Correct</p>
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-red-400">{stats.incorrect}</p>
-                  <p className="text-sm opacity-70">Incorrect</p>
-                </div>
+            <h2 className="text-2xl font-bold text-center mb-2">{questionData.text}</h2>
+            {isText && (
+              <p className="text-center text-sm text-purple-400 mb-4">Word Cloud — {wordCloudData.total} responses</p>
+            )}
+            {isSurvey && !isText && (
+              <p className="text-center text-sm text-blue-400 mb-4">Survey Question — No Correct Answer</p>
+            )}
+
+            {isText ? (
+              <div className="bg-white/5 rounded-2xl border border-white/10 p-4 mb-6">
+                <WordCloud words={wordCloudData.words} total={wordCloudData.total} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                {questionData.options?.map((opt: string, i: number) => {
+                  const originalIndex = questionData.optionOrder?.[i] ?? i;
+                  const isCorrect = !isSurvey && originalIndex === correctAnswer;
+                  return (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 1 }}
+                      animate={{
+                        scale: isSurvey ? 1 : isCorrect ? 1.05 : 0.95,
+                        opacity: isSurvey ? 1 : isCorrect ? 1 : 0.5,
+                      }}
+                      className={`${
+                        isSurvey ? optionColors[i] : isCorrect ? optionColors[i] : 'bg-gray-700'
+                      } p-6 rounded-xl text-center text-xl font-bold relative`}
+                    >
+                      <span className="text-3xl mr-3">{optionLabels[i]}</span>
+                      {opt}
+                      {isCorrect && <span className="absolute top-2 right-3 text-2xl">✓</span>}
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
+
+            {stats && !isText && (
+              <div className="mb-8">
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <BarChart3 className="h-5 w-5 text-blue-400" />
+                  <h3 className="text-lg font-bold">Answer Distribution</h3>
+                  <span className="text-sm opacity-60">({stats.total} responses)</span>
+                </div>
+                <div className="space-y-3">
+                  {questionData.options?.map((opt: string, i: number) => {
+                    const originalIndex = questionData.optionOrder?.[i] ?? i;
+                    const count = stats.distribution[originalIndex] || 0;
+                    const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
+                    const isCorrectOpt = !isSurvey && originalIndex === correctAnswer;
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded flex items-center justify-center text-white text-sm font-bold shrink-0 ${optionColors[i]}`}>
+                          {optionLabels[i]}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between text-sm mb-1">
+                            <span className="truncate mr-2">{opt}</span>
+                            <span className="font-bold shrink-0">
+                              {count} ({Math.round(pct)}%)
+                            </span>
+                          </div>
+                          <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pct}%` }}
+                              transition={{ duration: 0.8, ease: 'easeOut' }}
+                              className={`h-full rounded-full ${
+                                isCorrectOpt ? 'bg-green-500' : isSurvey ? optionColors[i].split(' ')[0] : 'bg-gray-500'
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {!isSurvey && (
+                  <div className="flex justify-center gap-8 text-center mt-6">
+                    <div>
+                      <p className="text-3xl font-bold text-green-400">{stats.correct}</p>
+                      <p className="text-sm opacity-70">Correct</p>
+                    </div>
+                    <div>
+                      <p className="text-3xl font-bold text-red-400">{stats.incorrect}</p>
+                      <p className="text-sm opacity-70">Incorrect</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="text-center mt-4 flex justify-center gap-3">
+              {!isSurvey && !isText && (
+                <Button size="lg" onClick={showLeaderboard} className="bg-yellow-500 hover:bg-yellow-600 text-lg">
+                  <Trophy className="h-5 w-5 mr-2" /> Show Leaderboard
+                </Button>
+              )}
+              <Button size="lg" onClick={nextQuestion} className="bg-green-500 hover:bg-green-600 text-lg">
+                <SkipForward className="h-5 w-5 mr-2" /> Next Question
+              </Button>
+            </div>
           </motion.div>
         )}
 

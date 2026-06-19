@@ -34,6 +34,7 @@ model Question {
   quizId        String
   text          String
   imageUrl      String?
+  questionType  String     @default("mcq")
   options       String
   correctOption Int
   timeLimit     Int        @default(20)
@@ -75,7 +76,8 @@ model Response {
   sessionId     String
   participantId String
   questionId    String
-  answer        Int
+  answer        Int         @default(-1)
+  textAnswer    String?
   isCorrect     Boolean
   responseTime  Float
   score         Int         @default(0)

@@ -120,12 +120,14 @@ export class QuizGateway implements OnGatewayDisconnect {
     await this.sessionService.updateCurrentQuestion(data.sessionId, nextIndex);
 
     const question = questions[nextIndex];
-    const options = JSON.parse(question.options);
+    const isText = question.questionType === 'text';
+    const options = isText ? [] : JSON.parse(question.options);
+    const isSurvey = question.correctOption === -1;
 
-    // Randomize options if enabled
     const settings = JSON.parse(session.quiz.settings || '{}');
+    const scoringMode = settings.scoringMode || 'time';
     let optionOrder = [0, 1, 2, 3];
-    if (settings.randomizeOptions) {
+    if (!isText && settings.randomizeOptions) {
       optionOrder = optionOrder.sort(() => Math.random() - 0.5);
     }
 
@@ -135,30 +137,54 @@ export class QuizGateway implements OnGatewayDisconnect {
       totalQuestions: questions.length,
       text: question.text,
       imageUrl: question.imageUrl,
-      options: optionOrder.map((i) => options[i]),
-      optionOrder,
+      questionType: question.questionType || 'mcq',
+      options: isText ? [] : optionOrder.map((i) => options[i]),
+      optionOrder: isText ? [] : optionOrder,
       timeLimit: question.timeLimit,
+      isSurvey: isText ? true : isSurvey,
+      scoringMode,
     });
 
     this.cache.set(`question:${data.sessionId}`, {
       questionId: question.id,
+      questionType: question.questionType || 'mcq',
       startTime: Date.now(),
       timeLimit: question.timeLimit,
-      optionOrder,
+      optionOrder: isText ? [] : optionOrder,
+      scoringMode,
     });
 
-    let remaining = question.timeLimit;
-    const timer = setInterval(() => {
-      remaining--;
-      this.server.to(data.sessionId).emit('timer-update', { remaining });
-      if (remaining <= 0) {
-        clearInterval(timer);
-        this.timers.delete(data.sessionId);
-        this.endQuestion(data.sessionId, question.id);
-      }
-    }, 1000);
+    if (question.timeLimit > 0) {
+      let remaining = question.timeLimit;
+      const timer = setInterval(() => {
+        remaining--;
+        this.server.to(data.sessionId).emit('timer-update', { remaining });
+        if (remaining <= 0) {
+          clearInterval(timer);
+          this.timers.delete(data.sessionId);
+          this.endQuestion(data.sessionId, question.id);
+        }
+      }, 1000);
 
-    this.timers.set(data.sessionId, timer);
+      this.timers.set(data.sessionId, timer);
+    }
+  }
+
+  @SubscribeMessage('end-question-manual')
+  async handleEndQuestionManual(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { sessionId: string },
+  ) {
+    const questionCache = this.cache.get<any>(`question:${data.sessionId}`);
+    if (!questionCache) return;
+
+    const timer = this.timers.get(data.sessionId);
+    if (timer) {
+      clearInterval(timer);
+      this.timers.delete(data.sessionId);
+    }
+
+    this.endQuestion(data.sessionId, questionCache.questionId);
   }
 
   @SubscribeMessage('submit-answer')
@@ -177,8 +203,8 @@ export class QuizGateway implements OnGatewayDisconnect {
       const responseTime =
         (Date.now() - questionCache.startTime) / 1000;
 
-      // Map the answer back through optionOrder to get the original index
       const originalAnswer = questionCache.optionOrder[data.answer];
+      const scoringMode = questionCache.scoringMode || 'time';
 
       const response = await this.sessionService.submitResponse(
         data.sessionId,
@@ -186,11 +212,13 @@ export class QuizGateway implements OnGatewayDisconnect {
         data.questionId,
         originalAnswer,
         responseTime,
+        scoringMode,
       );
 
       client.emit('answer-confirmed', {
         isCorrect: response.isCorrect,
         score: response.score,
+        isSurvey: response.isSurvey,
       });
 
       const responseCount = await this.prisma.response.count({
@@ -203,6 +231,61 @@ export class QuizGateway implements OnGatewayDisconnect {
       this.server.to(data.sessionId).emit('answer-received', {
         responseCount,
         totalPlayers,
+      });
+    } catch (err: any) {
+      client.emit('error', { message: err.message || 'Failed to submit' });
+    }
+  }
+
+  @SubscribeMessage('submit-text-answer')
+  async handleSubmitTextAnswer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: { sessionId: string; questionId: string; textAnswer: string },
+  ) {
+    try {
+      const questionCache = this.cache.get<any>(`question:${data.sessionId}`);
+      if (!questionCache || questionCache.questionId !== data.questionId) {
+        client.emit('error', { message: 'Question not active' });
+        return;
+      }
+
+      const responseTime = (Date.now() - questionCache.startTime) / 1000;
+
+      await this.sessionService.submitTextResponse(
+        data.sessionId,
+        client.data.participantId,
+        data.questionId,
+        data.textAnswer,
+        responseTime,
+      );
+
+      client.emit('answer-confirmed', {
+        isCorrect: false,
+        score: 0,
+        isSurvey: true,
+        isText: true,
+      });
+
+      const responseCount = await this.prisma.response.count({
+        where: { sessionId: data.sessionId, questionId: data.questionId },
+      });
+      const totalPlayers = await this.prisma.participant.count({
+        where: { sessionId: data.sessionId },
+      });
+
+      this.server.to(data.sessionId).emit('answer-received', {
+        responseCount,
+        totalPlayers,
+      });
+
+      const wordCloud = await this.sessionService.getWordCloudData(
+        data.sessionId,
+        data.questionId,
+      );
+      this.server.to(data.sessionId).emit('word-cloud-update', {
+        questionId: data.questionId,
+        ...wordCloud,
       });
     } catch (err: any) {
       client.emit('error', { message: err.message || 'Failed to submit' });
@@ -252,27 +335,52 @@ export class QuizGateway implements OnGatewayDisconnect {
     this.handleStartQuestion(client, data);
   }
 
+  @SubscribeMessage('show-leaderboard')
+  async handleShowLeaderboard(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { sessionId: string },
+  ) {
+    const leaderboard = await this.sessionService.getLeaderboard(data.sessionId);
+    this.server.to(data.sessionId).emit('leaderboard-update', {
+      rankings: leaderboard,
+    });
+  }
+
   private async endQuestion(sessionId: string, questionId: string) {
     const question = await this.prisma.question.findUnique({
       where: { id: questionId },
     });
     if (!question) return;
 
-    const stats = await this.sessionService.getQuestionStats(
-      sessionId,
-      questionId,
-    );
-    const leaderboard = await this.sessionService.getLeaderboard(sessionId);
+    const isText = question.questionType === 'text';
 
-    this.server.to(sessionId).emit('question-ended', {
-      correctAnswer: question.correctOption,
-      stats,
-    });
-
-    setTimeout(() => {
-      this.server.to(sessionId).emit('leaderboard-update', {
-        rankings: leaderboard,
+    if (isText) {
+      const wordCloud = await this.sessionService.getWordCloudData(
+        sessionId,
+        questionId,
+      );
+      this.server.to(sessionId).emit('question-ended', {
+        correctAnswer: -1,
+        stats: { total: wordCloud.total, correct: 0, incorrect: 0, distribution: [0, 0, 0, 0], isSurvey: true },
+        isSurvey: true,
+        isText: true,
+        wordCloud,
+        optionTexts: [],
       });
-    }, 1500);
+    } else {
+      const stats = await this.sessionService.getQuestionStats(
+        sessionId,
+        questionId,
+      );
+      const options = JSON.parse(question.options);
+
+      this.server.to(sessionId).emit('question-ended', {
+        correctAnswer: question.correctOption,
+        stats,
+        isSurvey: question.correctOption === -1,
+        isText: false,
+        optionTexts: options,
+      });
+    }
   }
 }

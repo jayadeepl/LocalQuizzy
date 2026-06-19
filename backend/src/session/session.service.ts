@@ -170,6 +170,7 @@ export class SessionService {
     questionId: string,
     answer: number,
     responseTime: number,
+    scoringMode: string = 'time',
   ) {
     const question = await this.prisma.question.findUnique({
       where: { id: questionId },
@@ -181,12 +182,19 @@ export class SessionService {
     });
     if (existing) throw new BadRequestException('Already answered');
 
-    const isCorrect = answer === question.correctOption;
-    const score = isCorrect
-      ? Math.round(
+    const isSurvey = question.correctOption === -1;
+    const isCorrect = isSurvey ? false : answer === question.correctOption;
+
+    let score = 0;
+    if (!isSurvey && isCorrect) {
+      if (scoringMode === 'correct' || question.timeLimit === 0) {
+        score = question.points;
+      } else {
+        score = Math.round(
           question.points * (1 - responseTime / question.timeLimit),
-        )
-      : 0;
+        );
+      }
+    }
 
     const response = await this.prisma.response.create({
       data: {
@@ -200,14 +208,67 @@ export class SessionService {
       },
     });
 
-    if (isCorrect) {
+    if (isCorrect && score > 0) {
       await this.prisma.participant.update({
         where: { id: participantId },
         data: { score: { increment: score } },
       });
     }
 
-    return response;
+    return { ...response, isSurvey };
+  }
+
+  async submitTextResponse(
+    sessionId: string,
+    participantId: string,
+    questionId: string,
+    textAnswer: string,
+    responseTime: number,
+  ) {
+    const question = await this.prisma.question.findUnique({
+      where: { id: questionId },
+    });
+    if (!question) throw new NotFoundException('Question not found');
+
+    const existing = await this.prisma.response.findFirst({
+      where: { sessionId, participantId, questionId },
+    });
+    if (existing) throw new BadRequestException('Already answered');
+
+    return this.prisma.response.create({
+      data: {
+        sessionId,
+        participantId,
+        questionId,
+        answer: -1,
+        textAnswer: textAnswer.trim(),
+        isCorrect: false,
+        responseTime,
+        score: 0,
+      },
+    });
+  }
+
+  async getWordCloudData(sessionId: string, questionId: string) {
+    const responses = await this.prisma.response.findMany({
+      where: { sessionId, questionId, textAnswer: { not: null } },
+      select: { textAnswer: true },
+    });
+
+    const freq = new Map<string, number>();
+    for (const r of responses) {
+      if (!r.textAnswer) continue;
+      const word = r.textAnswer.toLowerCase().trim();
+      if (word) {
+        freq.set(word, (freq.get(word) || 0) + 1);
+      }
+    }
+
+    const words = Array.from(freq.entries())
+      .map(([text, count]) => ({ text, count }))
+      .sort((a, b) => b.count - a.count);
+
+    return { words, total: responses.length };
   }
 
   async getLeaderboard(sessionId: string) {
@@ -219,10 +280,14 @@ export class SessionService {
   }
 
   async getQuestionStats(sessionId: string, questionId: string) {
+    const question = await this.prisma.question.findUnique({
+      where: { id: questionId },
+    });
     const responses = await this.prisma.response.findMany({
       where: { sessionId, questionId },
     });
 
+    const isSurvey = question ? question.correctOption === -1 : false;
     const total = responses.length;
     const correct = responses.filter((r) => r.isCorrect).length;
     const distribution = [0, 0, 0, 0];
@@ -230,6 +295,6 @@ export class SessionService {
       if (r.answer >= 0 && r.answer <= 3) distribution[r.answer]++;
     });
 
-    return { total, correct, incorrect: total - correct, distribution };
+    return { total, correct, incorrect: total - correct, distribution, isSurvey };
   }
 }

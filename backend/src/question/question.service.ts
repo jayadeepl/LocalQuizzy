@@ -11,15 +11,17 @@ export class QuestionService {
 
     const count = await this.prisma.question.count({ where: { quizId } });
 
+    const isText = dto.questionType === 'text';
     return this.prisma.question.create({
       data: {
         quizId,
         text: dto.text,
         imageUrl: dto.imageUrl,
-        options: JSON.stringify(dto.options),
-        correctOption: dto.correctOption,
+        questionType: dto.questionType || 'mcq',
+        options: isText ? '[]' : JSON.stringify(dto.options),
+        correctOption: isText ? -1 : (dto.correctOption ?? 0),
         timeLimit: dto.timeLimit || 20,
-        points: dto.points || 1000,
+        points: isText ? 0 : (dto.points || 1000),
         order: count,
       },
     });
@@ -38,6 +40,7 @@ export class QuestionService {
       data: {
         text: dto.text,
         imageUrl: dto.imageUrl,
+        questionType: dto.questionType,
         options: dto.options ? JSON.stringify(dto.options) : undefined,
         correctOption: dto.correctOption,
         timeLimit: dto.timeLimit,

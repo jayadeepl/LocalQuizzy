@@ -23,6 +23,7 @@ export interface Question {
   quizId: string;
   text: string;
   imageUrl?: string;
+  questionType: string;
   options: string;
   correctOption: number;
   timeLimit: number;
