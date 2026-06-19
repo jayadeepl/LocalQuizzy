@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useSocket } from '@/hooks/use-socket';
@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Clock, Check, X, Trophy, Loader2, Send } from 'lucide-react';
 
-type Phase = 'waiting' | 'question' | 'answered' | 'result' | 'leaderboard' | 'finished';
+type Phase = 'connecting' | 'waiting' | 'question' | 'answered' | 'result' | 'leaderboard' | 'finished';
 
 const optionLabels = ['A', 'B', 'C', 'D'];
 const optionColors = [
@@ -23,11 +23,13 @@ const optionColors = [
 
 export default function PlayerGamePage() {
   const params = useParams();
+  const router = useRouter();
   const sessionId = params.sessionId as string;
-  const { emit, on } = useSocket();
+  const { emit, on, connected } = useSocket();
   const timer = useTimer();
+  const rejoinAttempted = useRef(false);
 
-  const [phase, setPhase] = useState<Phase>('waiting');
+  const [phase, setPhase] = useState<Phase>('connecting');
   const [questionData, setQuestionData] = useState<any>(null);
   const [selectedAnswer, setSelectedAnswer] = useState(-1);
   const [answerResult, setAnswerResult] = useState<{ isCorrect: boolean; score: number; isSurvey?: boolean } | null>(null);
@@ -42,7 +44,28 @@ export default function PlayerGamePage() {
   const participantId = typeof window !== 'undefined' ? localStorage.getItem('participantId') : null;
 
   useEffect(() => {
+    if (!connected || rejoinAttempted.current) return;
+    rejoinAttempted.current = true;
+
+    if (participantId && sessionId) {
+      emit('rejoin-room', { sessionId, participantId });
+    } else {
+      router.replace('/join');
+    }
+  }, [connected, participantId, sessionId, emit, router]);
+
+  useEffect(() => {
     const unsubs = [
+      on('rejoin-success', (data: any) => {
+        setMyScore(data.score || 0);
+        setPhase('waiting');
+      }),
+      on('rejoin-failed', () => {
+        localStorage.removeItem('participantId');
+        localStorage.removeItem('sessionId');
+        localStorage.removeItem('playerName');
+        router.replace('/join');
+      }),
       on('question-start', (data: any) => {
         setQuestionData(data);
         setPhase('question');
@@ -129,6 +152,7 @@ export default function PlayerGamePage() {
     return (
       <div className="min-h-screen kahoot-gradient text-white flex flex-col items-center justify-center p-4">
         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center">
+          <p className="text-sm font-semibold tracking-widest uppercase text-white/60 mb-4">BIRD Lucknow</p>
           <Trophy className="h-16 w-16 mx-auto mb-4 text-yellow-300" />
           <h1 className="text-3xl font-bold mb-2">Game Over!</h1>
           <p className="text-6xl font-extrabold mb-2">{myResult?.score ?? myScore}</p>
@@ -152,12 +176,27 @@ export default function PlayerGamePage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-900 text-white">
       <div className="flex items-center justify-between p-3 bg-black/30 text-sm">
+        <span className="font-bold text-purple-400">BIRD LiveQuiz</span>
         <span className="font-medium">{playerName}</span>
         <span className="font-bold">{myScore} pts</span>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-4">
         <AnimatePresence mode="wait">
+          {phase === 'connecting' && (
+            <motion.div
+              key="connecting"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-center"
+            >
+              <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin opacity-50" />
+              <h2 className="text-2xl font-bold mb-2">Reconnecting...</h2>
+              <p className="text-lg opacity-70">Please wait</p>
+            </motion.div>
+          )}
+
           {phase === 'waiting' && (
             <motion.div
               key="waiting"

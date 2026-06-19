@@ -46,9 +46,26 @@ export class QuizGateway implements OnGatewayDisconnect {
     @MessageBody() data: { pin: string; playerName: string; teamName?: string },
   ) {
     try {
+      if (client.data?.participantId) {
+        client.emit('error', { message: 'Already joined' });
+        return;
+      }
+
       const session = await this.sessionService.findByPin(data.pin);
       if (session.status === 'FINISHED') {
         client.emit('error', { message: 'This quiz has already ended' });
+        return;
+      }
+
+      const existing = await this.prisma.participant.findFirst({
+        where: { sessionId: session.id, socketId: client.id },
+      });
+      if (existing) {
+        client.emit('joined', {
+          participant: existing,
+          sessionId: session.id,
+          quizTitle: session.quiz.title,
+        });
         return;
       }
 
@@ -78,6 +95,34 @@ export class QuizGateway implements OnGatewayDisconnect {
       });
     } catch (err: any) {
       client.emit('error', { message: err.message || 'Failed to join' });
+    }
+  }
+
+  @SubscribeMessage('rejoin-room')
+  async handleRejoin(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { sessionId: string; participantId: string },
+  ) {
+    try {
+      const participant = await this.sessionService.rejoinParticipant(
+        data.participantId,
+        data.sessionId,
+        client.id,
+      );
+      if (!participant) {
+        client.emit('rejoin-failed');
+        return;
+      }
+
+      client.join(data.sessionId);
+      client.data = { sessionId: data.sessionId, participantId: participant.id };
+
+      client.emit('rejoin-success', {
+        participant,
+        score: participant.score,
+      });
+    } catch (err: any) {
+      client.emit('rejoin-failed');
     }
   }
 

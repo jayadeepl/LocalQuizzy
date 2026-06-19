@@ -99,6 +99,18 @@ export class SessionService {
     });
   }
 
+  async rejoinParticipant(participantId: string, sessionId: string, socketId: string) {
+    const participant = await this.prisma.participant.findFirst({
+      where: { id: participantId, sessionId },
+    });
+    if (!participant) return null;
+    await this.prisma.participant.update({
+      where: { id: participantId },
+      data: { socketId },
+    });
+    return participant;
+  }
+
   async removeParticipant(socketId: string) {
     const participant = await this.prisma.participant.findFirst({
       where: { socketId },

@@ -156,9 +156,10 @@ export default function LobbyPage() {
         </Button>
       </div>
 
-      <div className="p-4 text-center opacity-60 text-sm">
-        {session.quiz.title} &middot; {session.quiz.questions?.length ?? 0} questions
-        {session.teamMode && ' · Team Mode'}
+      <div className="p-4 text-center text-sm">
+        <span className="opacity-60">{session.quiz.title} &middot; {session.quiz.questions?.length ?? 0} questions
+        {session.teamMode && ' · Team Mode'}</span>
+        <p className="text-[10px] tracking-widest uppercase text-white/40 mt-1">BIRD Lucknow &middot; On Device Quizzing</p>
       </div>
     </div>
   );

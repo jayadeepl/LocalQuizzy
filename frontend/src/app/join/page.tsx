@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ function JoinForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { emit, on } = useSocket();
+  const joinSent = useRef(false);
 
   const [pin, setPin] = useState(searchParams.get('pin') || '');
   const [name, setName] = useState('');
@@ -33,6 +34,7 @@ function JoinForm() {
 
     const unsub2 = on('error', (data: any) => {
       setLoading(false);
+      joinSent.current = false;
       toast.error(data.message);
     });
 
@@ -45,6 +47,8 @@ function JoinForm() {
       toast.error('Enter PIN and your name');
       return;
     }
+    if (joinSent.current) return;
+    joinSent.current = true;
     setLoading(true);
     emit('join-room', {
       pin: pin.trim(),
@@ -57,6 +61,7 @@ function JoinForm() {
     <div className="min-h-screen flex items-center justify-center p-4 kahoot-gradient">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
+          <p className="text-xs font-semibold tracking-widest uppercase text-primary mb-1">BIRD Lucknow</p>
           <Gamepad2 className="h-12 w-12 mx-auto mb-2 text-primary" />
           <CardTitle className="text-2xl">Join Quiz</CardTitle>
         </CardHeader>

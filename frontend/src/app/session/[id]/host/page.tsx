@@ -130,6 +130,7 @@ export default function HostGamePage() {
           animate={{ scale: 1 }}
           className="text-center"
         >
+          <p className="text-sm font-semibold tracking-widest uppercase text-white/60 mb-4">BIRD Lucknow</p>
           <Trophy className="h-20 w-20 mx-auto mb-4 text-yellow-300" />
           <h1 className="text-4xl font-bold mb-2">Quiz Complete!</h1>
           <p className="text-xl opacity-80 mb-8">{finalResults.totalQuestions} questions answered</p>
@@ -183,7 +184,10 @@ export default function HostGamePage() {
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="flex items-center justify-between p-3 bg-black/30">
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium">BIRD LiveQuiz</span>
+          <div>
+            <span className="text-sm font-bold text-purple-400">BIRD LiveQuiz</span>
+            <span className="text-[9px] text-white/40 ml-2 tracking-wider uppercase">BIRD Lucknow</span>
+          </div>
           {questionData && (
             <span className="text-sm opacity-70">
               Q{questionData.questionNumber}/{questionData.totalQuestions}
