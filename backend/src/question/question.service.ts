@@ -20,8 +20,8 @@ export class QuestionService {
         questionType: dto.questionType || 'mcq',
         options: isText ? '[]' : JSON.stringify(dto.options),
         correctOption: isText ? -1 : (dto.correctOption ?? 0),
-        timeLimit: dto.timeLimit || 20,
-        points: isText ? 0 : (dto.points || 1000),
+        timeLimit: dto.timeLimit ?? 20,
+        points: isText ? 0 : (dto.points ?? 1000),
         order: count,
       },
     });

@@ -14,7 +14,7 @@ import type { Quiz, Question } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import {
   ArrowLeft, Plus, Trash2, GripVertical, Save,
-  Play, Image, FileText, MessageSquare, Type, TimerOff,
+  Play, Image, FileText, MessageSquare, Type, TimerOff, Pencil, X,
 } from 'lucide-react';
 
 export default function QuizEditorPage() {
@@ -31,6 +31,18 @@ export default function QuizEditorPage() {
   const [scoringMode, setScoringMode] = useState<'time' | 'correct'>('time');
 
   const [newQ, setNewQ] = useState({
+    text: '',
+    options: ['', '', '', ''],
+    correctOption: 0,
+    timeLimit: 20,
+    points: 1000,
+    imageUrl: '',
+    isSurvey: false,
+    questionType: 'mcq' as 'mcq' | 'text',
+  });
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editQ, setEditQ] = useState({
     text: '',
     options: ['', '', '', ''],
     correctOption: 0,
@@ -111,6 +123,67 @@ export default function QuizEditorPage() {
           : prev,
       );
       toast.success('Question deleted');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const startEdit = (q: Question) => {
+    const opts = JSON.parse(q.options);
+    const isText = q.questionType === 'text';
+    const isSurvey = !isText && q.correctOption === -1;
+    setEditingId(q.id);
+    setEditQ({
+      text: q.text,
+      options: isText ? ['', '', '', ''] : (opts.length === 4 ? opts : [...opts, ...Array(4 - opts.length).fill('')]),
+      correctOption: q.correctOption,
+      timeLimit: q.timeLimit,
+      points: q.points,
+      imageUrl: q.imageUrl || '',
+      isSurvey,
+      questionType: (q.questionType || 'mcq') as 'mcq' | 'text',
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const isText = editQ.questionType === 'text';
+    if (!editQ.text) {
+      toast.error('Enter question text');
+      return;
+    }
+    if (!isText && editQ.options.some((o) => !o)) {
+      toast.error('Fill in all option fields');
+      return;
+    }
+    try {
+      const payload: any = {
+        text: editQ.text,
+        questionType: editQ.questionType,
+        timeLimit: editQ.timeLimit,
+        imageUrl: editQ.imageUrl || undefined,
+      };
+      if (isText) {
+        payload.options = [];
+        payload.correctOption = -1;
+        payload.points = 0;
+      } else {
+        payload.options = editQ.options;
+        payload.correctOption = editQ.isSurvey ? -1 : editQ.correctOption;
+        payload.points = editQ.points;
+      }
+      const updated = await api.put<Question>(`/questions/${editingId}`, payload);
+      setQuiz((prev) =>
+        prev
+          ? { ...prev, questions: prev.questions?.map((q) => (q.id === editingId ? updated : q)) }
+          : prev,
+      );
+      setEditingId(null);
+      toast.success('Question updated');
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -380,6 +453,160 @@ export default function QuizEditorPage() {
             const opts = JSON.parse(q.options);
             const isSurvey = q.correctOption === -1 && q.questionType !== 'text';
             const isText = q.questionType === 'text';
+            const isEditing = editingId === q.id;
+
+            if (isEditing) {
+              return (
+                <Card key={q.id} className="border-primary">
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Editing Q{i + 1}</span>
+                      <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Question Type</Label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setEditQ({ ...editQ, questionType: 'mcq', isSurvey: false })}
+                          className={`flex-1 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all flex items-center gap-2 justify-center ${
+                            editQ.questionType === 'mcq'
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border bg-background text-muted-foreground hover:border-primary/50'
+                          }`}
+                        >
+                          <MessageSquare className="h-4 w-4" /> Multiple Choice
+                        </button>
+                        <button
+                          onClick={() => setEditQ({ ...editQ, questionType: 'text', isSurvey: false })}
+                          className={`flex-1 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all flex items-center gap-2 justify-center ${
+                            editQ.questionType === 'text'
+                              ? 'border-purple-500 bg-purple-500/10 text-purple-500'
+                              : 'border-border bg-background text-muted-foreground hover:border-purple-500/50'
+                          }`}
+                        >
+                          <Type className="h-4 w-4" /> Text Response
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Question Text</Label>
+                      <Input
+                        value={editQ.text}
+                        onChange={(e) => setEditQ({ ...editQ, text: e.target.value })}
+                      />
+                    </div>
+
+                    {editQ.questionType === 'text' && (
+                      <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                        <p className="text-sm text-purple-400 font-medium">Word Cloud Question</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Participants type their response freely. Answers are shown as a word cloud where popular responses appear larger.
+                        </p>
+                      </div>
+                    )}
+
+                    {editQ.questionType === 'mcq' && (
+                      <>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                          <Switch
+                            checked={editQ.isSurvey}
+                            onCheckedChange={(checked) => setEditQ({ ...editQ, isSurvey: checked })}
+                          />
+                          <div>
+                            <Label className="cursor-pointer">Survey Question (No Correct Answer)</Label>
+                            <p className="text-xs text-muted-foreground">
+                              {editQ.isSurvey
+                                ? 'This is a poll — no scoring, just see what participants think'
+                                : 'This question has a correct answer and will be scored'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {editQ.options.map((opt, j) => (
+                            <div key={j} className="flex items-center gap-2">
+                              {!editQ.isSurvey ? (
+                                <div
+                                  className={`w-8 h-8 rounded flex items-center justify-center text-white text-sm font-bold cursor-pointer ${
+                                    editQ.correctOption === j ? optionColors[j] : 'bg-gray-300 dark:bg-gray-600'
+                                  }`}
+                                  onClick={() => setEditQ({ ...editQ, correctOption: j })}
+                                >
+                                  {optionLabels[j]}
+                                </div>
+                              ) : (
+                                <div className={`w-8 h-8 rounded flex items-center justify-center text-white text-sm font-bold ${optionColors[j]}`}>
+                                  {optionLabels[j]}
+                                </div>
+                              )}
+                              <Input
+                                placeholder={`Option ${optionLabels[j]}`}
+                                value={opt}
+                                onChange={(e) => {
+                                  const o = [...editQ.options];
+                                  o[j] = e.target.value;
+                                  setEditQ({ ...editQ, options: o });
+                                }}
+                                className="flex-1"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        {!editQ.isSurvey && (
+                          <p className="text-xs text-muted-foreground">Click a letter to mark it as the correct answer</p>
+                        )}
+                      </>
+                    )}
+
+                    <div className="flex items-end gap-4">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={editQ.timeLimit === 0}
+                          onCheckedChange={(checked) => setEditQ({ ...editQ, timeLimit: checked ? 0 : 20 })}
+                        />
+                        <Label className="text-sm cursor-pointer">No Timer</Label>
+                      </div>
+                      {editQ.timeLimit > 0 && (
+                        <div className="space-y-1">
+                          <Label>Time (sec)</Label>
+                          <Input
+                            type="number"
+                            min={5}
+                            max={120}
+                            value={editQ.timeLimit}
+                            onChange={(e) => setEditQ({ ...editQ, timeLimit: +e.target.value })}
+                            className="w-24"
+                          />
+                        </div>
+                      )}
+                      {editQ.timeLimit === 0 && (
+                        <p className="text-xs text-muted-foreground pb-1">Host will end the question manually</p>
+                      )}
+                      {editQ.questionType === 'mcq' && !editQ.isSurvey && (
+                        <div className="space-y-1">
+                          <Label>Points</Label>
+                          <Input
+                            type="number"
+                            min={100}
+                            value={editQ.points}
+                            onChange={(e) => setEditQ({ ...editQ, points: +e.target.value })}
+                            className="w-24"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={saveEdit}>
+                        <Save className="h-4 w-4 mr-1" /> Save Changes
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            }
+
             return (
               <Card key={q.id}>
                 <CardContent className="p-4">
@@ -398,9 +625,14 @@ export default function QuizEditorPage() {
                         </Badge>
                       )}
                     </div>
-                    <Button size="sm" variant="ghost" onClick={() => deleteQuestion(q.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => startEdit(q)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteQuestion(q.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                   {isText ? (
                     <div className="flex items-center gap-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 mb-2">
