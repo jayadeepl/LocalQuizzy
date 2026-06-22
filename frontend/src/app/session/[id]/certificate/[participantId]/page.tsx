@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { Download, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -38,51 +39,64 @@ export default function CertificatePage() {
     canvas.width = w;
     canvas.height = h;
 
-    const gradient = ctx.createLinearGradient(0, 0, w, h);
-    gradient.addColorStop(0, '#46178f');
-    gradient.addColorStop(1, '#7b2ff7');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, w, h);
+    const drawCert = (logoImg?: HTMLImageElement) => {
+      const gradient = ctx.createLinearGradient(0, 0, w, h);
+      gradient.addColorStop(0, '#46178f');
+      gradient.addColorStop(1, '#7b2ff7');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.fillRect(20, 20, w - 40, h - 40);
-    ctx.strokeStyle = '#ffd700';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(30, 30, w - 60, h - 60);
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fillRect(20, 20, w - 40, h - 40);
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(30, 30, w - 60, h - 60);
 
-    ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 16px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('CERTIFICATE OF ACHIEVEMENT', w / 2, 80);
+      const yOff = logoImg ? 50 : 0;
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '14px Arial';
-    ctx.fillText('This certifies that', w / 2, 140);
+      if (logoImg) {
+        const logoSize = 60;
+        ctx.drawImage(logoImg, w / 2 - logoSize / 2, 45, logoSize, logoSize);
+      }
 
-    ctx.font = 'bold 40px Arial';
-    ctx.fillText(data.name, w / 2, 200);
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('CERTIFICATE OF ACHIEVEMENT', w / 2, 80 + yOff);
 
-    ctx.font = '16px Arial';
-    ctx.fillText('has successfully completed', w / 2, 260);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '14px Arial';
+      ctx.fillText('This certifies that', w / 2, 140 + yOff);
 
-    ctx.font = 'bold 24px Arial';
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText(data.quizTitle, w / 2, 310);
+      ctx.font = 'bold 40px Arial';
+      ctx.fillText(data.name, w / 2, 200 + yOff);
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '18px Arial';
-    ctx.fillText(
-      `Rank #${data.rank} of ${data.totalParticipants} participants`,
-      w / 2,
-      370,
-    );
-    ctx.fillText(`Score: ${data.score} points`, w / 2, 410);
+      ctx.font = '16px Arial';
+      ctx.fillText('has successfully completed', w / 2, 260 + yOff);
 
-    ctx.font = '14px Arial';
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fillText(data.date, w / 2, 480);
+      ctx.font = 'bold 24px Arial';
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText(data.quizTitle, w / 2, 310 + yOff);
 
-    ctx.fillText('BIRD Lucknow - On Device Quizzing Solution', w / 2, 550);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '18px Arial';
+      ctx.fillText(
+        `Rank #${data.rank} of ${data.totalParticipants} participants`,
+        w / 2,
+        370 + yOff);
+      ctx.fillText(`Score: ${data.score} points`, w / 2, 410 + yOff);
+
+      ctx.font = '14px Arial';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(data.date, w / 2, 480);
+
+      ctx.fillText('BIRD Lucknow - On Device Quizzing Solution', w / 2, 550);
+    };
+
+    const logo = new window.Image();
+    logo.onload = () => drawCert(logo);
+    logo.onerror = () => drawCert();
+    logo.src = '/bird-logo.png';
   }, [data]);
 
   const download = () => {
@@ -105,9 +119,15 @@ export default function CertificatePage() {
           >
             <ArrowLeft className="h-4 w-4 mr-1" /> Back to Results
           </Link>
-          <Button onClick={download}>
-            <Download className="h-4 w-4 mr-2" /> Download Certificate
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <BirdLogo size={28} />
+              <span className="text-sm font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">BIRD LiveQuiz</span>
+            </div>
+            <Button onClick={download}>
+              <Download className="h-4 w-4 mr-2" /> Download Certificate
+            </Button>
+          </div>
         </div>
         <div className="flex justify-center">
           <canvas

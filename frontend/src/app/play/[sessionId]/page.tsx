@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { useSocket } from '@/hooks/use-socket';
 import { useTimer } from '@/hooks/use-timer';
 import { sounds } from '@/lib/sounds';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Clock, Check, X, Trophy, Loader2, Send } from 'lucide-react';
@@ -152,6 +153,7 @@ export default function PlayerGamePage() {
     return (
       <div className="min-h-screen kahoot-gradient text-white flex flex-col items-center justify-center p-4">
         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center">
+          <span className="flex justify-center mb-3"><BirdLogo size={48} variant="dark-bg" /></span>
           <p className="text-sm font-semibold tracking-widest uppercase text-white/60 mb-4">BIRD Lucknow</p>
           <Trophy className="h-16 w-16 mx-auto mb-4 text-yellow-300" />
           <h1 className="text-3xl font-bold mb-2">Game Over!</h1>
@@ -176,7 +178,10 @@ export default function PlayerGamePage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-900 text-white">
       <div className="flex items-center justify-between p-3 bg-black/30 text-sm">
-        <span className="font-bold text-purple-400">BIRD LiveQuiz</span>
+        <div className="flex items-center gap-1.5">
+          <BirdLogo size={18} variant="dark-bg" />
+          <span className="font-bold text-purple-400">BIRD LiveQuiz</span>
+        </div>
         <span className="font-medium">{playerName}</span>
         <span className="font-bold">{myScore} pts</span>
       </div>

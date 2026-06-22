@@ -8,6 +8,7 @@ import { useSocket } from '@/hooks/use-socket';
 import { useTimer } from '@/hooks/use-timer';
 import { sounds } from '@/lib/sounds';
 import type { QuestionStats, LeaderboardEntry } from '@/types';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WordCloud } from '@/components/ui/word-cloud';
 import {
@@ -130,6 +131,7 @@ export default function HostGamePage() {
           animate={{ scale: 1 }}
           className="text-center"
         >
+          <span className="flex justify-center mb-3"><BirdLogo size={56} variant="dark-bg" /></span>
           <p className="text-sm font-semibold tracking-widest uppercase text-white/60 mb-4">BIRD Lucknow</p>
           <Trophy className="h-20 w-20 mx-auto mb-4 text-yellow-300" />
           <h1 className="text-4xl font-bold mb-2">Quiz Complete!</h1>
@@ -184,7 +186,8 @@ export default function HostGamePage() {
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="flex items-center justify-between p-3 bg-black/30">
         <div className="flex items-center gap-4">
-          <div>
+          <div className="flex items-center gap-2">
+            <BirdLogo size={20} variant="dark-bg" />
             <span className="text-sm font-bold text-purple-400">BIRD LiveQuiz</span>
             <span className="text-[9px] text-white/40 ml-2 tracking-wider uppercase">BIRD Lucknow</span>
           </div>

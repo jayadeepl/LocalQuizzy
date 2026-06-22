@@ -9,7 +9,7 @@ echo.
 echo  Installing dependencies...
 echo.
 
-echo  [1/4] Checking Node.js...
+echo  [1/5] Checking Node.js...
 where node >nul 2>nul
 if %errorlevel% neq 0 (
     echo  ERROR: Node.js is not installed!
@@ -20,7 +20,7 @@ if %errorlevel% neq 0 (
 for /f "tokens=*" %%i in ('node -v') do echo  Found Node.js %%i
 
 echo.
-echo  [2/4] Installing root dependencies...
+echo  [2/5] Installing root dependencies...
 cd /d "%~dp0"
 call npm install
 if %errorlevel% neq 0 (
@@ -30,7 +30,7 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo  [3/4] Installing backend dependencies...
+echo  [3/5] Installing backend dependencies...
 cd /d "%~dp0backend"
 call npm install
 if %errorlevel% neq 0 (
@@ -48,13 +48,29 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo  [4/4] Installing frontend dependencies...
+echo  [4/5] Installing frontend dependencies...
 cd /d "%~dp0frontend"
 call npm install
 if %errorlevel% neq 0 (
     echo  ERROR: Frontend install failed!
     pause
     exit /b 1
+)
+
+echo.
+echo  [5/5] Configuring Windows Firewall...
+echo  (Requires admin - will skip if not elevated)
+net session >nul 2>nul
+if %errorlevel% equ 0 (
+    netsh advfirewall firewall delete rule name="BIRD LiveQuiz Frontend" >nul 2>nul
+    netsh advfirewall firewall delete rule name="BIRD LiveQuiz Backend" >nul 2>nul
+    netsh advfirewall firewall add rule name="BIRD LiveQuiz Frontend" dir=in action=allow protocol=TCP localport=3000 profile=any >nul
+    netsh advfirewall firewall add rule name="BIRD LiveQuiz Backend" dir=in action=allow protocol=TCP localport=3001 profile=any >nul
+    echo  Firewall rules added for ports 3000 and 3001.
+) else (
+    echo  WARNING: Not running as admin. Firewall rules NOT added.
+    echo  Other devices may not be able to connect.
+    echo  Run firewall-setup.bat as Administrator to fix this.
 )
 
 echo.

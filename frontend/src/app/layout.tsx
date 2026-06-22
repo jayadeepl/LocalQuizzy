@@ -29,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <title>BIRD LiveQuiz - On Device Quizzing Solution</title>
         <meta name="description" content="BIRD Lucknow - On Device Quizzing Solution" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="/bird-logo.png" type="image/png" />
       </head>
       <body className={inter.className}>
         <ThemeContext.Provider value={{ dark, setDark }}>

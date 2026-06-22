@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { useTheme } from '@/hooks/use-theme';
 import { Moon, Sun, Zap, Users, Trophy, Clock, Wifi } from 'lucide-react';
 
@@ -11,11 +12,14 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen">
       <nav className="flex items-center justify-between p-4 md:p-6">
-        <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-            BIRD LiveQuiz
-          </h1>
-          <p className="text-[10px] text-muted-foreground tracking-wider uppercase">BIRD Lucknow</p>
+        <div className="flex items-center gap-3">
+          <BirdLogo size={44} />
+          <div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              BIRD LiveQuiz
+            </h1>
+            <p className="text-[10px] text-muted-foreground tracking-wider uppercase">BIRD Lucknow</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -34,6 +38,7 @@ export default function LandingPage() {
       </nav>
 
       <main className="max-w-6xl mx-auto px-4 pt-16 pb-32 text-center">
+        <BirdLogo size={80} className="mx-auto mb-4" />
         <p className="text-sm font-semibold text-primary tracking-widest uppercase mb-4">
           BIRD Lucknow presents
         </p>
@@ -83,7 +88,10 @@ export default function LandingPage() {
       </main>
 
       <footer className="text-center py-8 text-sm text-muted-foreground border-t">
-        BIRD Lucknow &middot; On Device Quizzing Solution
+        <div className="flex items-center justify-center gap-2">
+          <BirdLogo size={24} />
+          <span>BIRD Lucknow &middot; On Device Quizzing Solution</span>
+        </div>
       </footer>
     </div>
   );

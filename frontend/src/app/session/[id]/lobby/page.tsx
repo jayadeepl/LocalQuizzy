@@ -7,6 +7,7 @@ import { useSocket } from '@/hooks/use-socket';
 import { api } from '@/lib/api';
 import { sounds } from '@/lib/sounds';
 import type { QuizSession, Participant } from '@/types';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { QRCodeSVG } from 'qrcode.react';
 import { Users, Play, Copy, Check, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -95,7 +96,10 @@ export default function LobbyPage() {
           <ArrowLeft className="h-4 w-4" />
           Exit
         </button>
-        <h1 className="text-xl font-bold">BIRD LiveQuiz</h1>
+        <div className="flex items-center gap-2">
+          <BirdLogo size={28} variant="dark-bg" />
+          <h1 className="text-xl font-bold">BIRD LiveQuiz</h1>
+        </div>
         <button onClick={() => { setSoundOn(!soundOn); sounds.toggle(!soundOn); }}>
           {soundOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
         </button>
@@ -159,7 +163,10 @@ export default function LobbyPage() {
       <div className="p-4 text-center text-sm">
         <span className="opacity-60">{session.quiz.title} &middot; {session.quiz.questions?.length ?? 0} questions
         {session.teamMode && ' · Team Mode'}</span>
-        <p className="text-[10px] tracking-widest uppercase text-white/40 mt-1">BIRD Lucknow &middot; On Device Quizzing</p>
+        <div className="flex items-center justify-center gap-2 mt-1">
+          <BirdLogo size={14} variant="dark-bg" />
+          <p className="text-[10px] tracking-widest uppercase text-white/40">BIRD Lucknow &middot; On Device Quizzing</p>
+        </div>
       </div>
     </div>
   );

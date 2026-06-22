@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { api } from '@/lib/api';
 import { getApiUrl } from '@/lib/utils';
 import type { SessionResults } from '@/types';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { motion } from 'framer-motion';
 import {
   Trophy, Download, ArrowLeft, Users, Target,
@@ -51,6 +52,7 @@ export default function ResultsPage() {
         </div>
 
         <div className="text-center mb-8">
+          <BirdLogo size={56} className="mx-auto mb-3" />
           <h1 className="text-3xl font-bold mb-2">{session.quiz.title}</h1>
           <p className="text-muted-foreground">
             {totalQuestions} questions &middot; {participants.length} participants

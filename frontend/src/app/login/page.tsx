@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 
@@ -34,6 +35,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4 kahoot-gradient">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+          <BirdLogo size={56} className="mx-auto mb-2" />
           <p className="text-xs text-muted-foreground tracking-widest uppercase mb-1">BIRD Lucknow</p>
           <CardTitle className="text-3xl font-bold">Welcome Back</CardTitle>
           <CardDescription>Sign in to host your quizzes</CardDescription>

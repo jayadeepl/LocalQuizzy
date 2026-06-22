@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
@@ -79,9 +80,12 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background">
       <nav className="border-b bg-card sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between p-4">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-            BIRD LiveQuiz
-          </h1>
+          <div className="flex items-center gap-2">
+            <BirdLogo size={32} />
+            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              BIRD LiveQuiz
+            </h1>
+          </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground hidden sm:block">
               {user.name}

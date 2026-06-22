@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { BirdLogo } from '@/components/ui/bird-logo';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { Quiz, Question } from '@/types';
@@ -221,9 +222,15 @@ export default function QuizEditorPage() {
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <Link href="/dashboard" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-4 w-4 mr-1" /> Dashboard
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-4 w-4 mr-1" /> Dashboard
+            </Link>
+            <div className="flex items-center gap-2">
+              <BirdLogo size={28} />
+              <span className="text-sm font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">BIRD LiveQuiz</span>
+            </div>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={saveQuiz}>
               <Save className="h-4 w-4 mr-1" /> Save
