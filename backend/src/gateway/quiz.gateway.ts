@@ -19,6 +19,10 @@ export class QuizGateway implements OnGatewayDisconnect {
   server: Server;
 
   private timers = new Map<string, NodeJS.Timeout>();
+  private timerRemaining = new Map<string, number>();
+  private pausedAt = new Map<string, number>();
+
+  private readonly DISCONNECT_GRACE_MS = 10000;
 
   constructor(
     private sessionService: SessionService,
@@ -27,17 +31,24 @@ export class QuizGateway implements OnGatewayDisconnect {
   ) {}
 
   async handleDisconnect(client: Socket) {
-    const participant = await this.sessionService.removeParticipant(client.id);
-    if (participant) {
-      const count = await this.prisma.participant.count({
-        where: { sessionId: participant.sessionId, socketId: { not: null } },
-      });
-      this.server.to(participant.sessionId).emit('player-left', {
-        participantId: participant.id,
-        playerName: participant.name,
-        totalPlayers: count,
-      });
-    }
+    // Give the client a grace period to reconnect (e.g. brief network drop,
+    // mobile tab backgrounding) before treating them as having left. If they
+    // reconnect via 'rejoin-room' in the meantime, their socketId in the DB
+    // will have already moved on, so this lookup will simply find nothing.
+    const socketId = client.id;
+    setTimeout(async () => {
+      const participant = await this.sessionService.removeParticipant(socketId);
+      if (participant) {
+        const count = await this.prisma.participant.count({
+          where: { sessionId: participant.sessionId, socketId: { not: null } },
+        });
+        this.server.to(participant.sessionId).emit('player-left', {
+          participantId: participant.id,
+          playerName: participant.name,
+          totalPlayers: count,
+        });
+      }
+    }, this.DISCONNECT_GRACE_MS);
   }
 
   @SubscribeMessage('join-room')
@@ -121,9 +132,82 @@ export class QuizGateway implements OnGatewayDisconnect {
         participant,
         score: participant.score,
       });
+
+      // Restore whatever is actually happening in the session right now —
+      // without this, a reconnecting/refreshing participant always lands on
+      // "waiting for host" even if a question is live, silently locking them
+      // out of answering until the next question starts.
+      const sync = await this.buildSessionSync(data.sessionId, participant.id);
+      if (sync) client.emit('session-sync', sync);
     } catch (err: any) {
       client.emit('rejoin-failed');
     }
+  }
+
+  private async buildSessionSync(sessionId: string, participantId: string) {
+    const session = await this.prisma.quizSession.findUnique({
+      where: { id: sessionId },
+      include: { quiz: { include: { questions: { orderBy: { order: 'asc' } } } } },
+    });
+    if (!session) return null;
+
+    if (session.status === 'FINISHED') {
+      const results = await this.sessionService.getResults(sessionId);
+      return { status: 'FINISHED' as const, results };
+    }
+
+    const questionCache = this.cache.get<any>(`question:${sessionId}`);
+    if (session.status === 'LOBBY' || !questionCache) {
+      return { status: 'LOBBY' as const };
+    }
+
+    const question = await this.prisma.question.findUnique({
+      where: { id: questionCache.questionId },
+    });
+    if (!question) return { status: 'LOBBY' as const };
+
+    const elapsed = (Date.now() - questionCache.startTime) / 1000;
+    const remaining =
+      questionCache.timeLimit > 0
+        ? Math.max(0, Math.ceil(questionCache.timeLimit - elapsed))
+        : 0;
+
+    if (questionCache.timeLimit > 0 && remaining <= 0) {
+      // The question is effectively over but hasn't been cleaned up yet —
+      // don't hand the client a dead question, just show "waiting".
+      return { status: 'LOBBY' as const };
+    }
+
+    const isText = question.questionType === 'text';
+    const options = isText ? [] : JSON.parse(question.options);
+    const isSurvey = question.correctOption === -1;
+
+    const existingResponse = await this.prisma.response.findFirst({
+      where: { sessionId, participantId, questionId: question.id },
+    });
+
+    return {
+      status: session.status as 'ACTIVE' | 'PAUSED',
+      paused: session.status === 'PAUSED',
+      question: {
+        questionId: question.id,
+        questionNumber: session.currentQuestion + 1,
+        totalQuestions: session.quiz.questions.length,
+        text: question.text,
+        imageUrl: question.imageUrl,
+        questionType: question.questionType || 'mcq',
+        options: isText ? [] : questionCache.optionOrder.map((i: number) => options[i]),
+        optionOrder: isText ? [] : questionCache.optionOrder,
+        timeLimit: questionCache.timeLimit,
+        isSurvey: isText ? true : isSurvey,
+        scoringMode: questionCache.scoringMode,
+      },
+      remaining,
+      alreadyAnswered: !!existingResponse,
+      myResponse: existingResponse
+        ? { isCorrect: existingResponse.isCorrect, score: existingResponse.score, isSurvey }
+        : undefined,
+    };
   }
 
   @SubscribeMessage('host-join')
@@ -200,19 +284,30 @@ export class QuizGateway implements OnGatewayDisconnect {
     });
 
     if (question.timeLimit > 0) {
-      let remaining = question.timeLimit;
-      const timer = setInterval(() => {
-        remaining--;
-        this.server.to(data.sessionId).emit('timer-update', { remaining });
-        if (remaining <= 0) {
-          clearInterval(timer);
-          this.timers.delete(data.sessionId);
-          this.endQuestion(data.sessionId, question.id);
-        }
-      }, 1000);
-
-      this.timers.set(data.sessionId, timer);
+      this.startTimer(data.sessionId, question.id, question.timeLimit);
     }
+  }
+
+  private startTimer(sessionId: string, questionId: string, seconds: number) {
+    const existing = this.timers.get(sessionId);
+    if (existing) clearInterval(existing);
+
+    let remaining = seconds;
+    this.timerRemaining.set(sessionId, remaining);
+
+    const timer = setInterval(() => {
+      remaining--;
+      this.timerRemaining.set(sessionId, remaining);
+      this.server.to(sessionId).emit('timer-update', { remaining });
+      if (remaining <= 0) {
+        clearInterval(timer);
+        this.timers.delete(sessionId);
+        this.timerRemaining.delete(sessionId);
+        this.endQuestion(sessionId, questionId);
+      }
+    }, 1000);
+
+    this.timers.set(sessionId, timer);
   }
 
   @SubscribeMessage('end-question-manual')
@@ -228,6 +323,8 @@ export class QuizGateway implements OnGatewayDisconnect {
       clearInterval(timer);
       this.timers.delete(data.sessionId);
     }
+    this.timerRemaining.delete(data.sessionId);
+    this.pausedAt.delete(data.sessionId);
 
     this.endQuestion(data.sessionId, questionCache.questionId);
   }
@@ -343,7 +440,11 @@ export class QuizGateway implements OnGatewayDisconnect {
     @MessageBody() data: { sessionId: string },
   ) {
     const timer = this.timers.get(data.sessionId);
-    if (timer) clearInterval(timer);
+    if (timer) {
+      clearInterval(timer);
+      this.timers.delete(data.sessionId);
+    }
+    this.pausedAt.set(data.sessionId, Date.now());
     await this.sessionService.updateStatus(data.sessionId, 'PAUSED');
     this.server.to(data.sessionId).emit('session-paused');
   }
@@ -354,6 +455,26 @@ export class QuizGateway implements OnGatewayDisconnect {
     @MessageBody() data: { sessionId: string },
   ) {
     await this.sessionService.updateStatus(data.sessionId, 'ACTIVE');
+
+    const pausedSince = this.pausedAt.get(data.sessionId);
+    if (pausedSince) {
+      this.pausedAt.delete(data.sessionId);
+
+      // Push the question's startTime forward by the pause duration so the
+      // paused interval isn't counted against players' response times/scores.
+      const pauseDuration = Date.now() - pausedSince;
+      const questionCache = this.cache.get<any>(`question:${data.sessionId}`);
+      if (questionCache) {
+        questionCache.startTime += pauseDuration;
+        this.cache.set(`question:${data.sessionId}`, questionCache);
+
+        const remaining = this.timerRemaining.get(data.sessionId);
+        if (remaining && remaining > 0) {
+          this.startTimer(data.sessionId, questionCache.questionId, remaining);
+        }
+      }
+    }
+
     this.server.to(data.sessionId).emit('session-resumed');
   }
 
@@ -367,6 +488,8 @@ export class QuizGateway implements OnGatewayDisconnect {
       clearInterval(timer);
       this.timers.delete(data.sessionId);
     }
+    this.timerRemaining.delete(data.sessionId);
+    this.pausedAt.delete(data.sessionId);
     await this.sessionService.updateStatus(data.sessionId, 'FINISHED');
     const results = await this.sessionService.getResults(data.sessionId);
     this.server.to(data.sessionId).emit('quiz-finished', results);
@@ -392,6 +515,12 @@ export class QuizGateway implements OnGatewayDisconnect {
   }
 
   private async endQuestion(sessionId: string, questionId: string) {
+    // Close the question for answers immediately: submit-answer/submit-text-answer
+    // check this cache entry, so clearing it here stops late submissions that
+    // race the reveal, and it also stops a reconnecting client's session-sync
+    // from replaying a question that has already ended.
+    this.cache.del(`question:${sessionId}`);
+
     const question = await this.prisma.question.findUnique({
       where: { id: questionId },
     });

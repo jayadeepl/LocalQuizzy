@@ -111,7 +111,11 @@ export default function HostGamePage() {
     ];
 
     return () => unsubs.forEach((u) => u());
-  }, [on, timer]);
+    // timer.start/update/reset are stable (see useTimer), so they're
+    // intentionally left out here — including the `timer` object itself
+    // would resubscribe every listener on every tick since it changes
+    // identity each time `remaining` updates.
+  }, [on]);
 
   const startFirstQuestion = useCallback(() => {
     emit('start-question', { sessionId });

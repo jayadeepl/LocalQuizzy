@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -28,7 +28,6 @@ export default function PlayerGamePage() {
   const sessionId = params.sessionId as string;
   const { emit, on, connected } = useSocket();
   const timer = useTimer();
-  const rejoinAttempted = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('connecting');
   const [questionData, setQuestionData] = useState<any>(null);
@@ -41,14 +40,33 @@ export default function PlayerGamePage() {
   const [isText, setIsText] = useState(false);
   const [noTimer, setNoTimer] = useState(false);
   const [textInput, setTextInput] = useState('');
-  const playerName = typeof window !== 'undefined' ? localStorage.getItem('playerName') || 'Player' : 'Player';
-  const participantId = typeof window !== 'undefined' ? localStorage.getItem('participantId') : null;
+  const [paused, setPaused] = useState(false);
+  const [playerName, setPlayerName] = useState('Player');
+  // undefined = not read from localStorage yet, null = confirmed absent.
+  const [participantId, setParticipantId] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!connected || rejoinAttempted.current) return;
-    rejoinAttempted.current = true;
+    // Read localStorage only after mount. Reading it during render produces
+    // a different value on the client's first pass than on the server
+    // render, which throws a React hydration mismatch on every load/reload.
+    setPlayerName(localStorage.getItem('playerName') || 'Player');
+    setParticipantId(localStorage.getItem('participantId'));
+  }, []);
+
+  useEffect(() => {
+    if (participantId === undefined) return; // still waiting on the read above
+
+    if (!connected) {
+      // The socket dropped (network blip, tab backgrounded, etc). Show a
+      // reconnecting state instead of leaving stale question/answer UI up.
+      setPhase('connecting');
+      return;
+    }
 
     if (participantId && sessionId) {
+      // Re-run on every (re)connect, not just the first one: a reconnect
+      // gets a brand new socket.id, so the server needs to be told again
+      // which participant this socket belongs to.
       emit('rejoin-room', { sessionId, participantId });
     } else {
       router.replace('/join');
@@ -118,12 +136,50 @@ export default function PlayerGamePage() {
         setPhase('finished');
         sounds.victory();
       }),
-      on('session-paused', () => {}),
-      on('session-resumed', () => {}),
+      on('session-paused', () => setPaused(true)),
+      on('session-resumed', () => setPaused(false)),
+      on('session-sync', (data: any) => {
+        if (data.status === 'LOBBY') {
+          setPhase('waiting');
+          return;
+        }
+        if (data.status === 'FINISHED') {
+          setFinalResults(data.results);
+          setPhase('finished');
+          sounds.victory();
+          return;
+        }
+
+        setPaused(data.status === 'PAUSED');
+        setQuestionData(data.question);
+        setIsSurvey(data.question.isSurvey || false);
+        setIsText(data.question.questionType === 'text');
+        setNoTimer(data.question.timeLimit === 0);
+
+        if (data.alreadyAnswered) {
+          setAnswerResult(data.myResponse || { isCorrect: false, score: 0, isSurvey: true });
+          setPhase('result');
+        } else {
+          setSelectedAnswer(-1);
+          setAnswerResult(null);
+          setTextInput('');
+          if (data.question.timeLimit > 0) {
+            timer.start(data.question.timeLimit);
+            timer.update(data.remaining);
+          } else {
+            timer.reset();
+          }
+          setPhase('question');
+        }
+      }),
     ];
 
     return () => unsubs.forEach((u) => u());
-  }, [on, timer, phase, participantId]);
+    // timer.start/update/reset are stable (see useTimer), so they're
+    // intentionally left out here — including the `timer` object itself
+    // would resubscribe every listener on every tick since it changes
+    // identity each time `remaining` updates.
+  }, [on, phase, participantId]);
 
   const submitAnswer = (index: number) => {
     if (selectedAnswer >= 0 || !questionData) return;
@@ -185,6 +241,16 @@ export default function PlayerGamePage() {
         <span className="font-medium">{playerName}</span>
         <span className="font-bold">{myScore} pts</span>
       </div>
+
+      {paused && (phase === 'question' || phase === 'answered') && (
+        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 mx-auto mb-4 opacity-50 animate-spin" />
+            <h2 className="text-2xl font-bold mb-2">Host Paused the Game</h2>
+            <p className="text-lg opacity-70">Hang tight, we&apos;ll resume shortly...</p>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col items-center justify-center p-4">
         <AnimatePresence mode="wait">
