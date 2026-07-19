@@ -15,8 +15,36 @@ import { toast } from 'sonner';
 import type { Quiz, DashboardStats, SessionSummary } from '@/types';
 import {
   Plus, FileSpreadsheet, Play, Edit, Trash2, Users,
-  LogOut, Moon, Sun, BarChart3, Clock, Upload,
+  LogOut, Moon, Sun, BarChart3, Clock, Upload, Download,
 } from 'lucide-react';
+
+const TEMPLATE_HEADERS = [
+  'Question', 'Option A', 'Option B', 'Option C', 'Option D',
+  'Correct Answer', 'Time Limit', 'Points',
+];
+
+const TEMPLATE_ROWS = [
+  ['What is the capital of France?', 'Paris', 'London', 'Berlin', 'Madrid', 'A', '20', '1000'],
+  ['Which planet is known as the Red Planet?', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'B', '20', '1000'],
+  ['2 + 2 = ?', '3', '4', '5', '6', 'B', '15', '500'],
+];
+
+function csvEscape(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function downloadTemplate() {
+  const csv = [TEMPLATE_HEADERS, ...TEMPLATE_ROWS]
+    .map((row) => row.map(csvEscape).join(','))
+    .join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'quiz-import-template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function DashboardPage() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -66,8 +94,8 @@ export default function DashboardPage() {
     formData.append('file', file);
     try {
       const quiz = await api.post<Quiz>('/quizzes/import', formData);
-      setQuizzes((prev) => [quiz, ...prev]);
-      toast.success('Quiz imported successfully');
+      toast.success(`Imported ${quiz.questions?.length ?? 0} questions — review and edit below`);
+      router.push(`/quiz/${quiz.id}/edit`);
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -134,6 +162,9 @@ export default function DashboardPage() {
               className="hidden"
               onChange={handleImport}
             />
+            <Button variant="outline" onClick={downloadTemplate}>
+              <Download className="h-4 w-4 mr-2" /> Template
+            </Button>
             <Button variant="outline" onClick={() => fileRef.current?.click()}>
               <Upload className="h-4 w-4 mr-2" /> Import
             </Button>

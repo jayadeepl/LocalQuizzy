@@ -15,7 +15,12 @@ export class ImportService {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json<any>(sheet);
 
-    if (rows.length === 0) {
+    const nonEmptyRows = rows.filter((row: any) => {
+      const text = row['Question'] || row['question'] || row['Q'];
+      return typeof text === 'string' ? text.trim().length > 0 : !!text;
+    });
+
+    if (nonEmptyRows.length === 0) {
       throw new BadRequestException('File is empty');
     }
 
@@ -26,7 +31,7 @@ export class ImportService {
       },
     });
 
-    const questions = rows.map((row: any, index: number) => {
+    const questions = nonEmptyRows.map((row: any, index: number) => {
       const questionText =
         row['Question'] || row['question'] || row['Q'] || '';
       const optA =
@@ -43,6 +48,7 @@ export class ImportService {
         row['Time Limit'] || row['time_limit'] || '20',
         10,
       );
+      const points = parseInt(row['Points'] || row['points'] || '1000', 10);
 
       const correctMap: Record<string, number> = {
         A: 0, B: 1, C: 2, D: 3,
@@ -61,7 +67,7 @@ export class ImportService {
         ]),
         correctOption: correctMap[String(correct)] ?? 0,
         timeLimit: isNaN(timeLimit) ? 20 : timeLimit,
-        points: 1000,
+        points: isNaN(points) ? 1000 : points,
         order: index,
       };
     });
