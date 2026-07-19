@@ -21,6 +21,30 @@ if not exist "%~dp0frontend\node_modules" (
     exit /b 1
 )
 
+:: Make sure nothing is already using our ports. Starting anyway would
+:: crash instantly with no visible error, since this window closes the
+:: moment the command exits. It would also make the builds below fail,
+:: since Windows locks the dist/.next files of anything still running.
+netstat -ano | findstr /c:":3000 " | findstr /i "LISTENING" >nul
+if not errorlevel 1 (
+    echo  ERROR: Port 3000 is already in use.
+    echo  LiveQuiz may already be running - try opening
+    echo  http://localhost:3000 in your browser.
+    echo  If nothing should be using it, run stop.bat first.
+    echo.
+    pause
+    exit /b 1
+)
+netstat -ano | findstr /c:":3001 " | findstr /i "LISTENING" >nul
+if not errorlevel 1 (
+    echo  ERROR: Port 3001 is already in use.
+    echo  LiveQuiz may already be running. If nothing should
+    echo  be using it, run stop.bat first.
+    echo.
+    pause
+    exit /b 1
+)
+
 :: Check firewall rules
 netsh advfirewall firewall show rule name="BIRD LiveQuiz Frontend" >nul 2>nul
 if %errorlevel% neq 0 (
@@ -47,7 +71,8 @@ echo.
 cd /d "%~dp0backend"
 call npx nest build
 if %errorlevel% neq 0 (
-    echo  ERROR: Backend build failed!
+    echo.
+    echo  ERROR: Backend build failed! See the errors above.
     pause
     exit /b 1
 )
@@ -55,7 +80,8 @@ if %errorlevel% neq 0 (
 cd /d "%~dp0frontend"
 call npx next build
 if %errorlevel% neq 0 (
-    echo  ERROR: Frontend build failed!
+    echo.
+    echo  ERROR: Frontend build failed! See the errors above.
     pause
     exit /b 1
 )
@@ -94,10 +120,29 @@ echo.
 :: Start backend in a new minimized window
 start "LiveQuiz Backend" /min cmd /c "cd /d "%~dp0backend" && node dist/main"
 
-:: Wait for backend to start
+:: Wait for backend to start, then confirm it actually came up. The
+:: backend window is minimized, so without this check a failed backend
+:: fails completely silently and the app just won't work.
 echo  Waiting for backend to start...
 timeout /t 3 /nobreak >nul
+
+netstat -ano | findstr /c:":3001 " | findstr /i "LISTENING" >nul
+if errorlevel 1 (
+    echo.
+    echo  WARNING: Backend does not appear to be running on port 3001 yet.
+    echo  Check the minimized "LiveQuiz Backend" window for errors.
+    echo  The app will not work correctly until that's fixed.
+    echo.
+)
 
 :: Start frontend in this window so user can see output
 cd /d "%~dp0frontend"
 call npx next start --hostname 0.0.0.0 --port 3000
+
+:: If we get here, the frontend server exited (Ctrl+C or a crash). Keep
+:: the window open so any error message is actually readable.
+echo.
+echo  ============================================
+echo    LiveQuiz frontend has stopped.
+echo  ============================================
+pause
